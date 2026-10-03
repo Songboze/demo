@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后台管理 · 优租机</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background:#f0f2f5; color:#333; }
+.container { max-width:900px; margin:0 auto; padding:20px; }
+.header { background: linear-gradient(135deg, #1a1a2e, #16213e); color: white; padding: 24px; text-align: center; border-radius: 12px; margin-bottom: 20px; position:relative; }
+.header h1 { font-size: 22px; margin-bottom: 6px; }
+.header p { font-size: 13px; opacity: 0.7; }
+.login-box { background: #fff; border-radius: 12px; padding: 30px; max-width: 400px; margin: 60px auto; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.login-box h2 { font-size: 20px; margin-bottom: 20px; text-align: center; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 14px; margin-bottom: 6px; color: #555; }
+.form-group input { width: 100%; padding: 12px 14px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 15px; outline: none; }
+.form-group input:focus { border-color: #667eea; }
+.btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
+.btn:hover { opacity: 0.9; }
+.btn-sm { padding: 8px 16px; font-size: 13px; width: auto; border-radius: 6px; }
+.btn-green { background: linear-gradient(135deg, #27ae60, #2ecc71); }
+.btn-red { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+.btn-gray { background: #999; }
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap:wrap; }
+.tab { padding: 10px 20px; background: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; border: 1px solid #e0e0e0; }
+.tab.active { background: #667eea; color: white; border-color: #667eea; }
+.apply-card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.apply-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.apply-card .name { font-size: 16px; font-weight: bold; }
+.apply-card .status { font-size: 12px; padding: 4px 10px; border-radius: 12px; }
+.status-pending { background: #fff3cd; color: #856404; }
+.status-approved { background: #d4edda; color: #155724; }
+.status-rejected { background: #f8d7da; color: #721c24; }
+.apply-card .info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; color: #666; margin-bottom: 12px; }
+.apply-card .info span { color: #999; margin-right: 4px; }
+.apply-card .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.apply-card .actions input { padding: 8px 12px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 14px; width: 120px; }
+.empty { text-align: center; padding: 60px 20px; color: #999; }
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px); background: #333; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; transition: all 0.3s; z-index: 999; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+.logout-btn { position: absolute; right: 20px; top: 20px; }
+</style>
+</head>
+<body>
+
+<div id="loginPage">
+  <div class="login-box">
+    <h2>🔐 后台管理登录</h2>
+    <div class="form-group">
+      <label>手机号</label>
+      <input type="tel" id="adminPhone" placeholder="请输入管理员手机号" maxlength="11">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="adminPwd" placeholder="请输入密码">
+    </div>
+    <button class="btn" onclick="adminLogin()">登录</button>
+  </div>
+</div>
+
+<div id="adminPage" style="display:none;">
+  <div class="container">
+    <div class="header">
+      <h1>优租机 · 后台管理</h1>
+      <p>管理用户额度申请</p >
+      <button class="btn btn-gray btn-sm logout-btn" onclick="adminLogout()">退出</button>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-tab="pending" onclick="switchTab('pending')">待审核</div>
+      <div class="tab" data-tab="approved" onclick="switchTab('approved')">已通过</div>
+      <div class="tab" data-tab="rejected" onclick="switchTab('rejected')">已拒绝</div>
+      <div class="tab" data-tab="all" onclick="switchTab('all')">全部</div>
+      <button class="btn btn-gray btn-sm" style="width:auto;margin-left:auto;" onclick="loadApplies()">刷新</button>
+    </div>
+    <div id="applyList"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ADMIN_PHONE = "18149206720";
+const ADMIN_PWD = "songfei790514";
+const API_BASE = "https://demo-d6gmejnna948829f2-1499920697.ap-shanghai.app.tcloudbase.com";
+
+let currentTab = "pending";
+let allApplies = [];
+
+function adminLogin() {
+  const phone = document.getElementById("adminPhone").value.trim();
+  const pwd = document.getElementById("adminPwd").value.trim();
+  if (phone === ADMIN_PHONE && pwd === ADMIN_PWD) {
+    sessionStorage.setItem("adminLoggedIn", "yes");
+    document.getElementById("loginPage").style.display = "none";
+    document.getElementById("adminPage").style.display = "block";
+    loadApplies();
+  } else {
+    showToast("账号或密码错误");
+  }
+}
+
+function adminLogout() {
+  sessionStorage.removeItem("adminLoggedIn");
+  document.getElementById("loginPage").style.display = "block";
+  document.getElementById("adminPage").style.display = "none";
+  document.getElementById("adminPhone").value = "";
+  document.getElementById("adminPwd").value = "";
+}
+
+async function loadApplies() {
+  try {
+    const res = await fetch(API_BASE + "/getApplies");
+    const data = await res.json();
+    if (data.success) {
+      allApplies = data.list;
+      renderApplies();
+    } else {
+      document.getElementById("applyList").innerHTML = '<div class="empty">加载失败：' + (data.message || '') + '</div>';
+    }
+  } catch(e) {
+    document.getElementById("applyList").innerHTML = '<div class="empty">网络错误：' + e.message + '</div>';
+  }
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelector(`.tab[data-tab="${tab}"]`).classList.add("active");
+  renderApplies();
+}
+
+function renderApplies() {
+  const el = document.getElementById("applyList");
+  let list = allApplies;
+  if (currentTab === "pending") list = allApplies.filter(a => a.status === "pending");
+  else if (currentTab === "approved") list = allApplies.filter(a => a.status === "approved");
+  else if (currentTab === "rejected") list = allApplies.filter(a => a.status === "rejected");
+
+  if (list.length === 0) {
+    el.innerHTML = '<div class="empty">暂无申请</div>';
+    return;
+  }
+
+  el.innerHTML = list.map(a => {
+    let statusText = "待审核";
+    let statusClass = "status-pending";
+    if (a.status === "approved") { statusText = "已通过"; statusClass = "status-approved"; }
+    if (a.status === "rejected") { statusText = "已拒绝"; statusClass = "status-rejected"; }
+
+    const canAct = a.status === "pending";
+
+    return `
+      <div class="apply-card">
+        <div class="top">
+          <div class="name">${a.real_name || "未填"} <span style="font-size:12px;color:#999;font-weight:normal;">(${a.user_phone})</span></div>
+          <div class="status ${statusClass}">${statusText}</div>
+        </div>
+        <div class="info">
+          <div><span>身份证：</span>${maskIdCard(a.id_card || "")}</div>
+          <div><span>手机号：</span>${a.phone || "-"}</div>
+          <div><span>职业：</span>${a.job || "-"}</div>
+          <div><span>月收入：</span>${a.income || "-"} 元</div>
+          <div><span>提交时间：</span>${formatTime(a.created_at)}</div>
+          <div><span>当前额度：</span>${a.credit || 0}</div>
+        </div>
+        ${canAct ? `
+          <div class="actions">
+            <span style="font-size:13px;color:#666;">发放额度：</span>
+            <input type="number" id="credit_${a.id}" placeholder="如 5000" value="5000">
+            <button class="btn btn-green btn-sm" onclick="approveApply('${a.id}', '${a.user_phone}')">通过</button>
+            <button class="btn btn-red btn-sm" onclick="rejectApply('${a.id}')">拒绝</button>
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+async function approveApply(applyId, userPhone) {
+  const creditInput = document.getElementById("credit_" + applyId);
+  const credit = parseInt(creditInput.value);
+  if (!credit || credit <= 0) return showToast("请输入有效的额度数字");
+
+  try {
+    const res = await fetch(API_BASE + "/approveApply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applyId, userPhone, credit })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast("已发放额度 " + credit + " 元");
+      loadApplies();
+    } else {
+      showToast(data.message || "操作失败");
+    }
+  } catch(e) {
+    showToast("网络错误");
+  }
+}
+
+async function rejectApply(applyId) {
+  if (!confirm("确定拒绝这个申请吗？")) return;
+  try {
+    const res = await fetch(API_BASE + "/rejectApply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applyId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast("已拒绝");
+      loadApplies();
+    } else {
+      showToast(data.message || "操作失败");
+    }
+  } catch(e) {
+    showToast("网络错误");
+  }
+}
+
+function maskIdCard(id) {
+  if (!id || id.length < 8) return id || "-";
+  return id.substring(0, 4) + "**********" + id.substring(id.length - 4);
+}
+
+function formatTime(t) {
+  if (!t) return "-";
+  const d = new Date(t);
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0') + " " + String(d.getHours()).padStart(2,'0') + ":" + String(d.getMinutes()).padStart(2,'0');
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+(function init() {
+  if (sessionStorage.getItem("adminLoggedIn") === "yes") {
+    document.getElementById("loginPage").style.display = "none";
+    document.getElementById("adminPage").style.display = "block";
+    loadApplies();
+  }
+})();
+</script>
+</body>
+</html>
